@@ -3,6 +3,10 @@ pub mod status;
 pub mod slice;
 pub mod options;
 pub mod cache;
+pub mod comparator;
+pub mod env;
+pub mod filter_policy;
+mod memtable;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

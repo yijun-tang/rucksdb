@@ -1,27 +1,106 @@
-use crate::{options::Options, status::Status};
+use std::{rc::Rc, sync::Mutex};
 
+use crate::{comparator::Comparator, db::version_edit::VersionEdit, env::{log, Env, FileLock}, filter_policy::FilterPolicy, memtable::MemTable, options::Options, status::Status};
 
+mod version_edit;
+mod dbformat;
 
 
 /// A DB is a persistent ordered map from keys to values.
 /// A DB is safe for concurrent access from multiple threads without
 /// any external synchronization.
-pub struct DB;
+pub struct DB {
+    // Lock over the persistent DB state.  Non-null iff successfully acquired.
+    db_lock_: Option<FileLock>,
+
+    env_: Rc<dyn Env>,
+    internal_comparator_: Rc<dyn Comparator>,
+    internal_filter_policy_: Option<Rc<dyn FilterPolicy>>,
+    options_: Options,  // options_.comparator == &internal_comparator_
+    dbname_: String,
+    mutex_: Mutex<InnerState>,
+}
+
+struct InnerState {
+    imm_: MemTable,
+}
+
+impl InnerState {
+    fn new() -> Self {
+        Self {
+            imm_: MemTable,
+        }
+    }
+}
 
 impl DB {
     /// Open the database with the specified "name".
     /// Returns boxed DB on success and a non-OK status on error.
-    pub fn open(options: Options, name: &str) -> Result<Box<DB>, Status> {
-        if options.block_cache.is_some() && options.no_block_cache {
-            return Err(Status::invalid_argument(
-                "no_block_cache is true while block_cache is not NULL", ""));
+    pub fn open(options: &Options, name: &str) -> Result<Box<DB>, Status> {
+        let db = Box::new(Self::new(options, name));
+        {
+            let guard = db.mutex_.lock().expect("failed to acquire lock");
+
         }
+        
+        
         todo!()
     }
 
-    fn new(options: &Options, dbname: &str) {
-        
+    fn new(raw_options: &Options, dbname: &str) -> DB {
+        Self {
+            db_lock_: None,
+            env_: raw_options.env.clone(),
+            internal_comparator_: raw_options.comparator.clone(),
+            internal_filter_policy_: raw_options.filter_policy.clone(),
+            options_: sanitize_options(dbname, raw_options.comparator.clone(), raw_options.filter_policy.clone(), raw_options),
+            dbname_: dbname.to_string(),
+            mutex_: Mutex::new(InnerState::new()),
+            
+        }
+    }
+
+    fn new_db(&self) -> Status {
+        let new_db = VersionEdit::new();
+        todo!()
+    }
+
+    /// The mutex should be acquired before calling it.
+    fn recover(&mut self) -> Status {
+        // Ignore error from CreateDir since the creation of the DB is
+        // committed only when the descriptor is created, and this directory
+        // may already exist from a previous failed creation attempt.
+        let _ = self.env_.create_dir(&self.dbname_);
+        assert!(self.db_lock_.is_none());
+        match self.env_.lock_file(&lock_file_name(&self.dbname_)) {
+            Ok(f) => { self.db_lock_ = Some(f); },
+            Err(s) => { return s; },
+        };
+
+        if !self.env_.file_exists(&current_file_name(&self.dbname_)) {
+            if self.options_.create_if_missing {
+                log(self.options_.info_log.clone(), &format!("Creating DB {} since it was missing.", &self.dbname_));
+
+            } else {
+                return Status::invalid_argument(&self.dbname_, "does not exist (create_if_missing is false)");
+            }
+        } else {
+
+        }
+
+        todo!()
     }
 }
 
+fn sanitize_options(dbname: &str, icmp: Rc<dyn Comparator>, ipolicy: Option<Rc<dyn FilterPolicy>>, src: &Options) -> Options {
 
+    todo!()
+}
+
+fn current_file_name(dbname: &str) -> String {
+    format!("{}/CURRENT", dbname)
+}
+
+fn lock_file_name(dbname: &str) -> String {
+    format!("{}/LOCK", dbname)
+}
