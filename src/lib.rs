@@ -7,6 +7,7 @@ pub mod comparator;
 pub mod env;
 pub mod filter_policy;
 mod memtable;
+mod util;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

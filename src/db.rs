@@ -1,9 +1,12 @@
 use std::{rc::Rc, sync::Mutex};
 
-use crate::{comparator::Comparator, db::version_edit::VersionEdit, env::{log, Env, FileLock}, filter_policy::FilterPolicy, memtable::MemTable, options::Options, status::Status};
+use crate::{comparator::Comparator, db::{filename::{current_file_name, descriptor_file_name, lock_file_name}, version_edit::VersionEdit}, env::{log, Env, FileLock}, filter_policy::FilterPolicy, memtable::MemTable, options::Options, status::Status};
 
 mod version_edit;
 mod dbformat;
+mod filename;
+mod log_writer;
+mod log_format;
 
 
 /// A DB is a persistent ordered map from keys to values.
@@ -61,7 +64,19 @@ impl DB {
     }
 
     fn new_db(&self) -> Status {
-        let new_db = VersionEdit::new();
+        let mut new_db = VersionEdit::new();
+        new_db.set_comparator_name(self.internal_comparator_.name());
+        new_db.set_log_number(0);
+        new_db.set_next_file(2);
+        new_db.set_last_sequence(0);
+
+        let manifest = descriptor_file_name(&self.dbname_, 1);
+        match self.env_.new_writable_file(&manifest) {
+            Ok(file) => {
+
+            },
+            Err(s) => { return s; },
+        }
         todo!()
     }
 
@@ -95,12 +110,4 @@ impl DB {
 fn sanitize_options(dbname: &str, icmp: Rc<dyn Comparator>, ipolicy: Option<Rc<dyn FilterPolicy>>, src: &Options) -> Options {
 
     todo!()
-}
-
-fn current_file_name(dbname: &str) -> String {
-    format!("{}/CURRENT", dbname)
-}
-
-fn lock_file_name(dbname: &str) -> String {
-    format!("{}/LOCK", dbname)
 }

@@ -8,9 +8,18 @@
 
 use std::rc::Rc;
 
-use crate::status::Status;
+use crate::{slice::Slice, status::Status};
 
 pub trait Env {
+
+    /// Create an object that writes to a new file with the specified
+    /// name.  Deletes any existing file with the same name and creates a
+    /// new file.  On success, stores a pointer to the new file in
+    /// *result and returns OK.  On failure stores nullptr in *result and
+    /// returns non-OK.
+    /// 
+    /// The returned file will only be accessed by one thread at a time.
+    fn new_writable_file(&self, fname: &str) -> Result<Rc<dyn WritableFile>, Status>;
 
     /// Returns true iff the named file exists.
     fn file_exists(&self, fname: &str) -> bool;
@@ -37,6 +46,16 @@ pub trait Env {
 
 /// Identifies a locked file.
 pub struct FileLock;
+
+/// A file abstraction for sequential writing.  The implementation
+/// must provide buffering since callers may append small fragments
+/// at a time to the file.
+pub trait WritableFile {
+    fn append(&self, data: &Slice);
+    fn close(&self);
+    fn flush(&self);
+    fn sync(&self);
+}
 
 /// An interface for writing log messages.
 pub trait Logger {

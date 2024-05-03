@@ -40,6 +40,35 @@ impl VersionEdit {
             new_files_: Vec::new(),
         }
     }
+
+    pub(crate) fn set_comparator_name(&mut self, name: &str) {
+        self.has_comparator_ = true;
+        self.comparator_ = name.to_string();
+    }
+
+    pub(crate) fn set_log_number(&mut self, num: u64) {
+        self.has_log_number_ = true;
+        self.log_number_ = num;
+    }
+
+    pub(crate) fn set_prev_log_number(&mut self, num: u64) {
+        self.has_prev_log_number_ = true;
+        self.prev_log_number_ = num;
+    }
+
+    pub(crate) fn set_next_file(&mut self, num: u64) {
+        self.has_next_file_number_ = true;
+        self.next_file_number_ = num;
+    }
+
+    pub(crate) fn set_last_sequence(&mut self, seq: SequenceNumber) {
+        self.has_last_sequence_ = true;
+        self.last_sequence_ = seq;
+    }
+
+    pub(crate) fn set_compact_pointer(&mut self, level: i32, key: InternalKey) {
+        self.compact_pointers_.push((level, key));
+    }
 }
 
 pub(crate) struct FileMetaData {
