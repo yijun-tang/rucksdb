@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Mutex};
 
-use crate::{comparator::Comparator, db::{filename::{current_file_name, descriptor_file_name, lock_file_name}, version_edit::VersionEdit}, env::{log, Env, FileLock}, filter_policy::FilterPolicy, memtable::MemTable, options::Options, status::Status};
+use crate::{comparator::Comparator, db::{filename::{current_file_name, descriptor_file_name, lock_file_name}, log_writer::Writer, version_edit::VersionEdit}, env::{log, Env, FileLock}, filter_policy::FilterPolicy, memtable::MemTable, options::Options, status::Status};
 
 mod version_edit;
 mod dbformat;
@@ -73,7 +73,7 @@ impl DB {
         let manifest = descriptor_file_name(&self.dbname_, 1);
         match self.env_.new_writable_file(&manifest) {
             Ok(file) => {
-
+                let log = Writer::new(file);
             },
             Err(s) => { return s; },
         }

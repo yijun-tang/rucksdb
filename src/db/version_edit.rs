@@ -41,6 +41,12 @@ impl VersionEdit {
         }
     }
 
+    pub(crate) fn encode_to(&self) {
+        if self.has_comparator_ {
+            
+        }
+    }
+
     pub(crate) fn set_comparator_name(&mut self, name: &str) {
         self.has_comparator_ = true;
         self.comparator_ = name.to_string();

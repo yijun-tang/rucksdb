@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::{env::WritableFile, slice::Slice, status::Status};
+use crate::{env::WritableFile, slice::Slice, status::Status, util::crc32c::value};
 
 use super::log_format::{RecordType, MAX_RECORD_TYPE};
 
@@ -42,10 +42,10 @@ impl Writer {
     }
 
     fn init_type_crc() -> [u32; MAX_RECORD_TYPE as usize + 1] {
-        let res = [0u32; MAX_RECORD_TYPE as usize + 1];
-        for i in 0..res.len() {
-            
+        let mut type_crc = [0u32; MAX_RECORD_TYPE as usize + 1];
+        for i in 0..type_crc.len() {
+            type_crc[i] = value(&[i as u8]);
         }
-        todo!()
+        type_crc
     }
 }
