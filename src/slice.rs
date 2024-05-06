@@ -8,6 +8,8 @@
 //! non-const method, all threads accessing the same Slice must use
 //! external synchronization.
 
+use std::str::from_utf8;
+
 #[derive(Clone)]
 pub struct Slice<'a> {
     data_: &'a [u8],
@@ -33,6 +35,11 @@ impl<'a> Slice<'a> {
         }
     }
 
+    /// Return true iff the length of the referenced data is zero
+    pub fn is_empty(&self) -> bool {
+        self.size() == 0
+    }
+
     /// Return a pointer to the beginning of the referenced data
     pub fn data(&self) -> &[u8] {
         &self.data_[self.start_..self.end_]
@@ -43,6 +50,15 @@ impl<'a> Slice<'a> {
         self.start_ += n;
         clone.end_ = self.start_;
         clone
+    }
+
+    /// Return a string that contains the copy of the referenced data.
+    pub fn to_utf8_string(&self) -> Option<String> {
+        let s = &self.data_[self.start_..self.end_];
+        match from_utf8(s) {
+            Ok(ss) => { Some(ss.to_string()) },
+            Err(_) => { None },
+        }
     }
 }
 

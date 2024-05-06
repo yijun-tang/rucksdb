@@ -6,6 +6,7 @@
 //! non-const method, all threads accessing the same Status must use
 //! external synchronization.
 
+#[derive(Debug)]
 pub struct Status {
     // OK status has a None state_.  Otherwise, state_ is a byte vector
     // of the following form:
