@@ -2,11 +2,14 @@ use std::{rc::Rc, sync::Mutex};
 
 use crate::{comparator::Comparator, db::{filename::{current_file_name, descriptor_file_name, lock_file_name, set_current_file}, log_writer::Writer, version_edit::VersionEdit}, env::{log, Env, FileLock}, filter_policy::FilterPolicy, memtable::MemTable, options::Options, slice::Slice, status::Status};
 
-mod version_edit;
-mod dbformat;
-mod filename;
-mod log_writer;
-mod log_format;
+use self::version_set::VersionSet;
+
+pub(crate) mod version_edit;
+pub(crate) mod version_set;
+pub(crate) mod dbformat;
+pub(crate) mod filename;
+pub(crate) mod log_writer;
+pub(crate) mod log_format;
 
 
 /// A DB is a persistent ordered map from keys to values.
@@ -26,12 +29,15 @@ pub struct DB {
 
 struct InnerState {
     imm_: MemTable,
+
+    versions_: VersionSet,
 }
 
 impl InnerState {
     fn new() -> Self {
         Self {
             imm_: MemTable,
+            versions_: VersionSet::new(),
         }
     }
 }

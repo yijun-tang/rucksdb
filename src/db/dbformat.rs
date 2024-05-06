@@ -1,4 +1,6 @@
-use crate::{slice::Slice, util::coding::put_fixed64};
+use std::{cmp::Ordering, sync::Arc};
+
+use crate::{comparator::Comparator, slice::Slice, util::coding::{decode_fixed64, decode_fixed64_bytes, put_fixed64}};
 
 use super::version_edit::SequenceNumber;
 
@@ -49,6 +51,48 @@ impl<'a> ParsedInternalKey<'a> {
     }
 }
 
+/// Returns the user key portion of an internal key.
+#[inline]
+fn extract_user_key<'a>(internal_key: &'a [u8]) -> Slice<'a> {
+    debug_assert!(internal_key.len() >= 8);
+    Slice::new_with_range(internal_key, 0, internal_key.len() - 8)
+}
+
+pub(crate) struct InternalKeyComparator {
+    user_comparator_: Arc<dyn Comparator>,
+}
+impl InternalKeyComparator {
+    pub(crate) fn new(cmp: Arc<dyn Comparator>) -> Self {
+        Self { user_comparator_: cmp }
+    }
+    pub(crate) fn user_comparator(&self) -> Arc<dyn Comparator> {
+        self.user_comparator_.clone()
+    }
+}
+impl Comparator for InternalKeyComparator {
+    fn name(&self) -> &'static str {
+        return "leveldb.InternalKeyComparator"
+    }
+
+    fn compare(&self, a: &Slice, b: &Slice) -> std::cmp::Ordering {
+        // Order by:
+        //    increasing user key (according to user-supplied comparator)
+        //    decreasing sequence number
+        //    decreasing type (though sequence# should be enough to disambiguate)
+        let mut r = self.user_comparator_.compare(&extract_user_key(a.data()), &extract_user_key(b.data()));
+        if r == Ordering::Equal {
+            let anum = decode_fixed64_bytes(&a.data()[(a.size() - 8)..]);
+            let bnum = decode_fixed64_bytes(&b.data()[(b.size() - 8)..]);
+            if anum > bnum {
+                r = Ordering::Less;
+            } else if anum < bnum {
+                r = Ordering::Greater;
+            }
+        }
+        r
+    }
+}
+
 /// Modules in this directory should keep internal keys wrapped inside
 /// the following class instead of plain strings so that we do not
 /// incorrectly use string comparisons instead of an InternalKeyComparator.
@@ -76,5 +120,9 @@ impl InternalKey {
 
     pub(crate) fn decode_from(s: &Slice) -> Self {
         Self { rep_: s.data().to_vec() }
+    }
+
+    pub(crate) fn user_key(&self) -> Slice {
+        extract_user_key(&self.rep_)
     }
 }

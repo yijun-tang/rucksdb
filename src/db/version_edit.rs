@@ -271,10 +271,10 @@ fn get_level(input: &mut Slice) -> Option<i32> {
 pub(crate) struct FileMetaData {
     refs: i32,
     allowed_seeks: i32, // Seeks allowed until compaction
-    number: u64,
-    file_size: u64,     // File size in bytes
-    smallest: InternalKey, // Smallest internal key served by table
-    largest: InternalKey,  // Largest internal key served by table
+    pub(crate) number: u64,
+    pub(crate) file_size: u64,     // File size in bytes
+    pub(crate) smallest: InternalKey, // Smallest internal key served by table
+    pub(crate) largest: InternalKey,  // Largest internal key served by table
 }
 
 impl FileMetaData {

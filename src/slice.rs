@@ -8,7 +8,7 @@
 //! non-const method, all threads accessing the same Slice must use
 //! external synchronization.
 
-use std::str::from_utf8;
+use std::{cmp::Ordering, str::from_utf8};
 
 #[derive(Clone)]
 pub struct Slice<'a> {
@@ -60,6 +60,15 @@ impl<'a> Slice<'a> {
             Err(_) => { None },
         }
     }
+
+    /// Three-way comparison.  Returns value:
+    ///   <  0 iff "*this" <  "b",
+    ///   == 0 iff "*this" == "b",
+    ///   >  0 iff "*this" >  "b"
+    #[inline]
+    pub fn compare(&self, b: &Self) -> Ordering {
+        self.data().cmp(b.data())
+    }
 }
 
 impl<'a> PartialEq<&[u8]> for Slice<'a> {
@@ -74,4 +83,14 @@ impl<'a> PartialEq<&[u8]> for Slice<'a> {
         }
         true
     } 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compare_with_empty_test() {
+        assert!(Slice::new(b"s").compare(&Slice::new(b"")) == Ordering::Greater);
+    }
 }

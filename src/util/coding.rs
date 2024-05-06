@@ -123,17 +123,23 @@ pub(crate) fn encode_fixed32(value: u32) -> [u8; 4] {
 }
 
 #[inline]
-fn decode_fixed32(bytes: [u8; 4]) -> u32 {
+pub(crate)fn decode_fixed32(bytes: [u8; 4]) -> u32 {
     u32::from_le_bytes(bytes)
 }
 
 #[inline]
-fn encode_fixed64(value: u64) -> [u8; 8] {
+pub(crate) fn encode_fixed64(value: u64) -> [u8; 8] {
     value.to_le_bytes()
 }
 
+pub(crate) fn decode_fixed64_bytes(bytes: &[u8]) -> u64 {
+    debug_assert!(bytes.len() == 8);
+    let bytes_: [u8; 8] = [bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]];
+    decode_fixed64(bytes_)
+}
+
 #[inline]
-fn decode_fixed64(bytes: [u8; 8]) -> u64 {
+pub(crate) fn decode_fixed64(bytes: [u8; 8]) -> u64 {
     u64::from_le_bytes(bytes)
 }
 
