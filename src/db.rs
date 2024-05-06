@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Mutex};
 
-use crate::{comparator::Comparator, db::{filename::{current_file_name, descriptor_file_name, lock_file_name}, log_writer::Writer, version_edit::VersionEdit}, env::{log, Env, FileLock}, filter_policy::FilterPolicy, memtable::MemTable, options::Options, status::Status};
+use crate::{comparator::Comparator, db::{filename::{current_file_name, descriptor_file_name, lock_file_name, set_current_file}, log_writer::Writer, version_edit::VersionEdit}, env::{log, Env, FileLock}, filter_policy::FilterPolicy, memtable::MemTable, options::Options, slice::Slice, status::Status};
 
 mod version_edit;
 mod dbformat;
@@ -71,13 +71,29 @@ impl DB {
         new_db.set_last_sequence(0);
 
         let manifest = descriptor_file_name(&self.dbname_, 1);
+        let mut s = Status::new_ok();
         match self.env_.new_writable_file(&manifest) {
             Ok(file) => {
-                let log = Writer::new(file);
+                let mut log = Writer::new(file.clone());
+                let mut record = Vec::new();
+                new_db.encode_to(&mut record);
+                s = log.add_record(&Slice::new(&record));
+                if s.ok() {
+                    s = file.sync();
+                }
+                if s.ok() {
+                    s = file.close();
+                }
             },
             Err(s) => { return s; },
         }
-        todo!()
+        if s.ok() {
+            // Make "CURRENT" file that points to the new manifest file.
+            s = set_current_file(self.env_.clone(), &self.dbname_, 1);
+        } else {
+            self.env_.remove_file(&manifest);
+        }
+        s
     }
 
     /// The mutex should be acquired before calling it.
@@ -86,7 +102,7 @@ impl DB {
         // committed only when the descriptor is created, and this directory
         // may already exist from a previous failed creation attempt.
         let _ = self.env_.create_dir(&self.dbname_);
-        assert!(self.db_lock_.is_none());
+        debug_assert!(self.db_lock_.is_none());
         match self.env_.lock_file(&lock_file_name(&self.dbname_)) {
             Ok(f) => { self.db_lock_ = Some(f); },
             Err(s) => { return s; },
@@ -95,13 +111,17 @@ impl DB {
         if !self.env_.file_exists(&current_file_name(&self.dbname_)) {
             if self.options_.create_if_missing {
                 log(self.options_.info_log.clone(), &format!("Creating DB {} since it was missing.", &self.dbname_));
-
+                let s = self.new_db();
+                if !s.ok() {
+                    return s;
+                }
             } else {
                 return Status::invalid_argument(&self.dbname_, "does not exist (create_if_missing is false)");
             }
         } else {
-
+            return Status::invalid_argument(&self.dbname_, "exists (error_if_exists is true)");
         }
+
 
         todo!()
     }

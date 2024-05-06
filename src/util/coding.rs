@@ -118,7 +118,7 @@ fn get_varint32_idx_fallback(bytes: &[u8], mut idx: isize) -> (isize, u32) {
 }
 
 #[inline]
-fn encode_fixed32(value: u32) -> [u8; 4] {
+pub(crate) fn encode_fixed32(value: u32) -> [u8; 4] {
     value.to_le_bytes()
 }
 

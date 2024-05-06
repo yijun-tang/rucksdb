@@ -24,8 +24,22 @@ pub trait Env {
     /// Returns true iff the named file exists.
     fn file_exists(&self, fname: &str) -> bool;
 
+    /// Delete the named file.
+    /// 
+    /// The default implementation calls DeleteFile, to support legacy Env
+    /// implementations. Updated Env implementations must override RemoveFile and
+    /// ignore the existence of DeleteFile. Updated code calling into the Env API
+    /// must call RemoveFile instead of DeleteFile.
+    /// 
+    /// A future release will remove DeleteDir and the default implementation of
+    /// RemoveDir.
+    fn remove_file(&self, fname: &str) -> Status;
+
     /// Create the specified directory.
     fn create_dir(&self, dirname: &str) -> Result<(), Status>;
+
+    /// Rename file src to target.
+    fn rename_file(&self, src: &str, target: &str) -> Status;
 
     /// Lock the specified file.  Used to prevent concurrent access to
     /// the same db by multiple processes.  On failure, stores nullptr in
@@ -51,10 +65,10 @@ pub struct FileLock;
 /// must provide buffering since callers may append small fragments
 /// at a time to the file.
 pub trait WritableFile {
-    fn append(&self, data: &Slice);
-    fn close(&self);
-    fn flush(&self);
-    fn sync(&self);
+    fn append(&self, data: &Slice) -> Status;
+    fn close(&self) -> Status;
+    fn flush(&self) -> Status;
+    fn sync(&self) -> Status;
 }
 
 /// An interface for writing log messages.
