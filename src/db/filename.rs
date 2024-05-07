@@ -2,6 +2,14 @@ use std::rc::Rc;
 
 use crate::{env::Env, slice::Slice, status::Status, util::env::write_string_to_file_sync};
 
+/// Return the name of the log file with the specified number
+/// in the db named by "dbname".  The result will be prefixed with
+/// "dbname".
+pub(crate) fn log_file_name(dbname: &str, number: u64) -> String {
+    debug_assert!(number > 0);
+    make_file_name(dbname, number, "log")
+}
+
 fn make_file_name(dbname: &str, number: u64, suffix: &str) -> String {
     format!("{}/{:06}.{}", dbname, number, suffix)
 }

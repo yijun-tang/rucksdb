@@ -10,7 +10,7 @@
 
 use std::{cmp::Ordering, rc::{Rc, Weak}, sync::Arc};
 
-use crate::{comparator::Comparator, db::dbformat::{InternalKey, MAX_SEQUENCE_NUMBER, VALUE_TYPE_FOR_SEEK}, slice::Slice};
+use crate::{comparator::Comparator, db::dbformat::{InternalKey, MAX_SEQUENCE_NUMBER, VALUE_TYPE_FOR_SEEK}, slice::Slice, status::Status};
 
 use super::{dbformat::{InternalKeyComparator, NUM_LEVELS}, version_edit::FileMetaData};
 
@@ -121,10 +121,23 @@ impl Version {
 
 pub(crate) struct VersionSet {
 
+    next_file_number_: u64,
 }
 impl VersionSet {
     pub(crate) fn new() -> Self {
         todo!()
+    }
+
+    /// Recover the last saved descriptor from persistent storage.
+    pub(crate) fn recover(&mut self) -> Result<bool, Status> {
+        todo!()
+    }
+
+    /// Allocate and return a new file number
+    pub(crate) fn new_file_number(&mut self) -> u64 {
+        let file_number = self.next_file_number_;
+        self.next_file_number_ += 1;
+        file_number
     }
 }
 

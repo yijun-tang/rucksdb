@@ -58,6 +58,7 @@ fn extract_user_key<'a>(internal_key: &'a [u8]) -> Slice<'a> {
     Slice::new_with_range(internal_key, 0, internal_key.len() - 8)
 }
 
+#[derive(Clone)]
 pub(crate) struct InternalKeyComparator {
     user_comparator_: Arc<dyn Comparator>,
 }

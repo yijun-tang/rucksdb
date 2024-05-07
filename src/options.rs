@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use crate::{cache::Cache, comparator::Comparator, env::{Env, Logger}, filter_policy::FilterPolicy};
 
@@ -14,7 +14,7 @@ pub struct Options {
     /// REQUIRES: The client must ensure that the comparator supplied
     /// here has the same name and orders keys *exactly* the same as the
     /// comparator provided to previous open calls on the same DB.
-    pub comparator: Rc<dyn Comparator>,
+    pub comparator: Arc<dyn Comparator>,
 
     /// If true, the database will be created if it is missing.
     pub create_if_missing: bool,
