@@ -68,6 +68,9 @@ impl InternalKeyComparator {
     pub(crate) fn user_comparator(&self) -> Arc<dyn Comparator> {
         self.user_comparator_.clone()
     }
+    pub(crate) fn compare2(&self, a: &InternalKey, b: &InternalKey) -> Ordering {
+        self.compare(&a.encode(), &b.encode())
+    }
 }
 impl Comparator for InternalKeyComparator {
     fn name(&self) -> &'static str {
@@ -96,7 +99,7 @@ impl Comparator for InternalKeyComparator {
 /// Modules in this directory should keep internal keys wrapped inside
 /// the following class instead of plain strings so that we do not
 /// incorrectly use string comparisons instead of an InternalKeyComparator.
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct InternalKey {
     rep_: Vec<u8>,
 }

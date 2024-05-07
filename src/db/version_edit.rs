@@ -268,6 +268,7 @@ fn get_level(input: &mut Slice) -> Option<i32> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct FileMetaData {
     refs: i32,
     allowed_seeks: i32, // Seeks allowed until compaction
