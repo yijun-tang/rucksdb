@@ -5,3 +5,4 @@ pub(crate) mod comparator;
 pub(crate) mod arena;
 pub(crate) mod random;
 pub(crate) mod hash;
+pub(crate) mod testutil;

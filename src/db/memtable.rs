@@ -2,13 +2,12 @@ use crate::util::arena::Arena;
 
 use super::{dbformat::InternalKeyComparator, skiplist::SkipList};
 
-type Table = SkipList;
 
 pub(crate) struct MemTable {
     comparator_: KeyComparator,
     refs_: i32,
     arena_: Arena,
-    table_: Table,
+    // table_: Table,
 }
 
 impl MemTable {

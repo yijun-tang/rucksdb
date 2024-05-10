@@ -6,7 +6,7 @@
 //! All Env implementations are safe for concurrent access from
 //! multiple threads without any external synchronization.
 
-use std::rc::Rc;
+use std::{any::Any, rc::Rc};
 
 use crate::{slice::Slice, status::Status};
 
@@ -56,6 +56,14 @@ pub trait Env {
     /// 
     /// May create the named file if it does not already exist.
     fn lock_file(&self, fname: &str) -> Result<FileLock, Status>;
+
+    /// Arrange to run "(*function)(arg)" once in a background thread.
+    /// 
+    /// "function" may run in an unspecified thread.  Multiple functions
+    /// added to the same Env may run concurrently in different threads.
+    /// I.e., the caller may not assume that background work items are
+    /// serialized.
+    fn schedule(&self, func: &dyn Fn(&dyn Any));
 }
 
 /// Identifies a locked file.

@@ -1,14 +1,14 @@
-use std::{alloc::{Allocator, Global}, rc::Rc, sync::atomic::{AtomicUsize, Ordering}};
+use std::{alloc::{Allocator, Global}, rc::Rc, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
 
 #[derive(Clone)]
 pub(crate) struct Arena {
-    global_: Rc<Global>,
-    allocated_: Rc<AtomicUsize>,
+    global_: Arc<Global>,
+    allocated_: Arc<AtomicUsize>,
 }
 
 impl Arena {
     pub(crate) fn new() -> Self {
-        Self { global_: Rc::new(Global), allocated_: Rc::new(AtomicUsize::new(0)) }
+        Self { global_: Arc::new(Global), allocated_: Arc::new(AtomicUsize::new(0)) }
     }
 
     /// Returns an estimate of the total memory usage of data allocated

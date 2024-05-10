@@ -1,4 +1,4 @@
-#![feature(allocator_api)]
+#![feature(allocator_api, slice_flatten)]
 
 pub mod db;
 pub mod status;
