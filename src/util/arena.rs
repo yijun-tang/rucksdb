@@ -1,4 +1,4 @@
-use std::{alloc::{Allocator, Global}, rc::Rc, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
+use std::{alloc::{Allocator, Global}, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
 
 #[derive(Clone)]
 pub(crate) struct Arena {
@@ -33,8 +33,6 @@ unsafe impl Allocator for Arena {
 
 #[cfg(test)]
 mod tests {
-    use std::mem::size_of_val;
-
     use super::*;
 
     #[test]

@@ -5,6 +5,8 @@
 // Reads require a guarantee that the SkipList will not be destroyed
 // while the read is in progress.  Apart from that, reads progress
 // without any internal locking or synchronization.
+// 
+// 注意: 修改后的 Node 和 Iter 有 internal locking (RwLock)
 //
 // Invariants:
 //
@@ -17,11 +19,8 @@
 // Only Insert() modifies the list, and it is careful to initialize
 // a node and use release-stores to publish the nodes in one or
 // more lists.
-//
-// ... prev vs. next pointer ordering ...
 
-use std::{cell::RefCell, rc::Rc, sync::{Arc, RwLock}};
-
+use std::sync::{Arc, RwLock};
 use crate::util::{arena::Arena, random::Random};
 
 static MAX_HEIGHT: i32 = 12;
@@ -52,9 +51,10 @@ impl<K: PartialOrd + Clone> SkipList<K> {
     /// Insert key into the list.
     /// REQUIRES: nothing that compares equal to key is currently in the list.
     pub(crate) fn insert(&self, key: &K) {
-        let mut prev: Vec<NullableNodePtr<K>, Arena> = Vec::with_capacity_in(MAX_HEIGHT as usize, self.arena_.clone());
+        let mut prev: Vec<NullableNodePtr<K>, Arena> = 
+            Vec::with_capacity_in(MAX_HEIGHT as usize, self.arena_.clone());
         for _ in 0..(MAX_HEIGHT) { prev.push(None); }
-        let x = self.find_greater_or_equal(key, &mut prev);
+        let x = self.find_greater_or_equal(key, Some(&mut prev));
 
         // Our data structure does not allow duplicate insertion
         debug_assert!(x.is_none() || x.unwrap().key != *key);
@@ -84,9 +84,7 @@ impl<K: PartialOrd + Clone> SkipList<K> {
 
     /// Returns true iff an entry that compares equal to key is in the list.
     pub(crate) fn contains(&self, key: &K) -> bool {
-        let mut prev: Vec<NullableNodePtr<K>, Arena> = Vec::with_capacity_in(MAX_HEIGHT as usize, self.arena_.clone());
-        for _ in 0..(MAX_HEIGHT) { prev.push(None); }
-        let x = self.find_greater_or_equal(key, &mut prev);
+        let x = self.find_greater_or_equal(key, None);
         if let Some(n) = x {
             n.key == *key
         } else {
@@ -94,15 +92,10 @@ impl<K: PartialOrd + Clone> SkipList<K> {
         }
     }
 
-    pub(crate) fn iter(list: Arc<SkipList<K>, Arena>) -> Iter<K> {
-        Iter::new(list)
-    }
-
     fn new_node(key: K, height: i32, alloc: Arena) -> Arc<Node<K>, Arena> {
-        let mut next_: Vec<NullableNodePtr<K>, Arena> = Vec::with_capacity_in(height as usize, alloc.clone());
-        for _ in 0..(height as usize) {
-            next_.push(None);
-        }
+        let mut next_: Vec<NullableNodePtr<K>, Arena> = 
+            Vec::with_capacity_in(height as usize, alloc.clone());
+        for _ in 0..(height as usize) { next_.push(None); }
         Arc::new_in(Node { key, next_: RwLock::new(next_) }, alloc)
     }
 
@@ -111,7 +104,7 @@ impl<K: PartialOrd + Clone> SkipList<K> {
     /// 
     /// If prev is non-null, fills prev[level] with pointer to previous
     /// node at "level" for every level in [0..max_height_-1].
-    fn find_greater_or_equal(&self, key: &K, prev: &mut Vec<NullableNodePtr<K>, Arena>) -> NullableNodePtr<K> {
+    fn find_greater_or_equal(&self, key: &K, mut prev: Option<&mut Vec<NullableNodePtr<K>, Arena>>) -> NullableNodePtr<K> {
         let mut x = self.head_.clone();
         let mut level = self.get_max_height() as usize - 1;
         loop {
@@ -120,7 +113,9 @@ impl<K: PartialOrd + Clone> SkipList<K> {
                 // Keep searching in this list
                 x = next.unwrap();
             } else {
-                prev[level] = Some(x.clone());
+                if let Some(ref mut p) = prev {
+                    p[level] = Some(x.clone());
+                }
                 if level == 0 {
                     return next;
                 } else {
@@ -195,28 +190,32 @@ impl<K: PartialOrd + Clone> SkipList<K> {
     }
 }
 
-/// Iteration over the contents of a skip list
+/// Iterator over the contents of a skip list.
+/// 
+/// Current implementation of SkipList only support node insertion.
+/// There is no way to read non-existent node for multiple threads.
+/// Thread Safe.
 pub(crate) struct Iter<K> {
     list_: Arc<SkipList<K>, Arena>,
-    node_: NullableNodePtr<K>,
+    node_: RwLock<NullableNodePtr<K>>,
 }
 
 impl<K: PartialOrd + Clone> Iter<K> {
     /// Initialize an iterator over the specified list.
     /// The returned iterator is not valid.
     pub(crate) fn new(list: Arc<SkipList<K>, Arena>) -> Self {
-        Self { list_: list, node_: None }
+        Self { list_: list, node_: RwLock::new(None) }
     }
 
     /// Returns true iff the iterator is positioned at a valid node.
     pub(crate) fn valid(&self) -> bool {
-        self.node_.is_some()
+        self.node_.read().unwrap().is_some()
     }
 
     /// Position at the first entry in list.
     /// Final state of iterator is Valid() iff list is not empty.
     pub(crate) fn seek_to_first(&mut self) {
-        self.node_ = self.list_.head_.next(0);
+        *self.node_.write().unwrap() = self.list_.head_.next(0);
     }
 
     /// Position at the last entry in list.
@@ -224,30 +223,29 @@ impl<K: PartialOrd + Clone> Iter<K> {
     pub(crate) fn seek_to_last(&mut self) {
         if let Some(l) = self.list_.find_last() {
             if Arc::ptr_eq(&l, &self.list_.head_) {
-                self.node_ = None;
+                *self.node_.write().unwrap() = None;
             } else {
-                self.node_ = Some(l);
+                *self.node_.write().unwrap() = Some(l);
             }
         }
     }
 
     /// Advance to the first entry with a key >= target
     pub(crate) fn seek(&mut self, target: &K) {
-        let mut prev: Vec<NullableNodePtr<K>, Arena> = Vec::with_capacity_in(MAX_HEIGHT as usize, self.list_.arena_.clone());
-        for _ in 0..(MAX_HEIGHT) { prev.push(None); }
-        self.node_ = self.list_.find_greater_or_equal(target, &mut prev);
+        *self.node_.write().unwrap() = self.list_.find_greater_or_equal(target, None);
     }
 
     /// Returns the key at the current position.
     /// REQUIRES: Valid()
     pub(crate) fn key(&self) -> K {
-        self.node_.clone().expect("require non-null").key.clone()
+        self.node_.read().unwrap().clone().expect("require non-null").key.clone()
     }
 
     /// Advances to the next position.
     /// REQUIRES: Valid()
     pub(crate) fn next(&mut self) {
-        self.node_ = self.node_.clone().unwrap().next(0);
+        let copy = self.node_.read().unwrap().clone();
+        *self.node_.write().unwrap() = copy.unwrap().next(0);
     }
 
     /// Advances to the previous position.
@@ -255,20 +253,24 @@ impl<K: PartialOrd + Clone> Iter<K> {
     pub(crate) fn prev(&mut self) {
         // Instead of using explicit "prev" links, we just search for the
         // last node that falls before key.
-        if let Some(p) = self.list_.find_less_than(&self.node_.clone().unwrap().key) {
+        let copy = self.node_.read().unwrap().clone();
+        if let Some(p) =
+            self.list_.find_less_than(&copy.unwrap().key) {
             if Arc::ptr_eq(&p, &self.list_.head_) {
-                self.node_ = None;
+                *self.node_.write().unwrap() = None;
             } else {
-                self.node_ = Some(p);
+                *self.node_.write().unwrap() = Some(p);
             }
         }
     }
 }
 
 type NullableNodePtr<K> = Option<Arc<Node<K>, Arena>>;
+/// Internal node of SkipList.
+/// Thread Safe.
 struct Node<K> {
     key: K,
-    // Array of length equal to the node height.  next_[0] is lowest level link.
+    // Length of vector equal to the node height.  next_[0] is lowest level link.
     next_: RwLock<Vec<NullableNodePtr<K>, Arena>>,
 }
 
@@ -276,8 +278,6 @@ impl<K> Node<K> {
     /// Accessors/mutators for links.  Wrapped in methods so we can
     /// add the appropriate barriers as necessary.
     fn next(&self, n: usize) -> NullableNodePtr<K> {
-        // Use an 'acquire load' so that we observe a fully initialized
-        // version of the returned Node.
         self.next_.read().unwrap()[n].clone()
     }
 
@@ -288,8 +288,7 @@ impl<K> Node<K> {
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Borrow, collections::BTreeSet, io::Read, os::macos::raw::stat, sync::{atomic::{AtomicBool, AtomicI32, Ordering}, Arc, Condvar, Mutex}, thread};
-
+    use std::{collections::BTreeSet, sync::{atomic::{AtomicBool, AtomicI32, Ordering}, Arc, Condvar, Mutex}, thread};
     use crate::util::{hash::hash, testutil::random_seed};
 
     use super::*;
@@ -594,6 +593,7 @@ mod tests {
         arg.change(ReaderState::Done);
     }
 
+    // One writer, one reader.
     fn run_concurrent(run: i32) {
         let seed = random_seed() + (run * 100) as u32;
         let mut rnd = Random::new(seed);
