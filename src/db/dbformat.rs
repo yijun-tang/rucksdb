@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, sync::Arc};
 
-use crate::{comparator::Comparator, slice::Slice, util::coding::{decode_fixed64, decode_fixed64_bytes, put_fixed64}};
+use crate::{comparator::Comparator, slice::Slice, util::coding::{decode_fixed64, decode_fixed64_bytes, encode_fixed64, encode_varint32, encode_varint32_to, put_fixed64, varint_length}};
 
 use super::version_edit::SequenceNumber;
 
@@ -31,6 +31,7 @@ pub(crate) struct ValueType(u8);
 impl ValueType {
     pub(crate) fn type_deletion() -> Self { Self(0) }
     pub(crate) const fn type_value() -> Self { Self(1) }
+    pub(crate) fn value(&self) -> u8 { self.0 }
 }
 // kValueTypeForSeek defines the ValueType that should be passed when
 // constructing a ParsedInternalKey object for seeking to a particular
@@ -128,5 +129,43 @@ impl InternalKey {
 
     pub(crate) fn user_key(&self) -> Slice {
         extract_user_key(&self.rep_)
+    }
+}
+
+pub(crate) struct LookupKey {
+    // varint32 for internal key length
+    // u8 array for user key
+    // fixed64 for tag (packed sequence number and value type)
+    rep_: Vec<u8>,
+    start_: usize,  // the index of the user key in the rep_ vector
+}
+
+impl LookupKey {
+    /// Initialize *this for looking up user_key at a snapshot with
+    /// the specified sequence number.
+    pub(crate) fn new(user_key: &Slice, seq: SequenceNumber) -> Self {
+        let usize = user_key.size();
+        let needed = usize + 13;    // A conservative estimate
+        let mut buf = Vec::with_capacity(needed);
+        let start_ = varint_length((usize + 8) as u64);
+        buf.append(&mut encode_varint32((usize + 8) as u32));
+        buf.extend(user_key.data());
+        buf.extend(encode_fixed64(pack_sequence_and_type(seq, VALUE_TYPE_FOR_SEEK)));
+        Self { rep_: buf, start_ }
+    }
+
+    /// Return a key suitable for lookup in a MemTable.
+    pub(crate) fn memtable_key(&self) -> Slice {
+        Slice::new(&self.rep_)
+    }
+
+    /// Return an internal key (suitable for passing to an internal iterator)
+    pub(crate) fn internal_key(&self) -> Slice {
+        Slice::new_with_range(&self.rep_, self.start_, self.rep_.len())
+    }
+
+    /// Return the user key
+    pub(crate) fn user_key(&self) -> Slice {
+        Slice::new_with_range(&self.rep_, self.start_, self.rep_.len() - 8)
     }
 }

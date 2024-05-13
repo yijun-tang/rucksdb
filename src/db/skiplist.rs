@@ -20,12 +20,17 @@
 // a node and use release-stores to publish the nodes in one or
 // more lists.
 
-use std::sync::{Arc, RwLock};
+use std::{cmp::Ordering, sync::{Arc, RwLock}};
 use crate::util::{arena::Arena, random::Random};
 
 static MAX_HEIGHT: i32 = 12;
 
-pub(crate) struct SkipList<K> {
+pub(crate) trait Comparator<K> {
+    fn compare(&self, left: &K, right: &K) -> Ordering;
+}
+
+pub(crate) struct SkipList<K, C> {
+    compare_: C,
     arena_: Arena,
     head_: Arc<Node<K>, Arena>,
     
@@ -37,10 +42,11 @@ pub(crate) struct SkipList<K> {
     rnd_: RwLock<Random>,
 }
 
-impl<K: PartialOrd + Clone> SkipList<K> {
-    pub(crate) fn new_in(key: K, arena: Arena) -> Self {
+impl<K: PartialOrd + Clone, C: Comparator<K>> SkipList<K, C> {
+    pub(crate) fn new_in(key: K, cmp: C, arena: Arena) -> Self {
         let head = Self::new_node(key, MAX_HEIGHT, arena.clone());
         Self {
+            compare_: cmp,
             arena_: arena,
             head_: head,
             max_height_: RwLock::new(1),
@@ -50,14 +56,14 @@ impl<K: PartialOrd + Clone> SkipList<K> {
 
     /// Insert key into the list.
     /// REQUIRES: nothing that compares equal to key is currently in the list.
-    pub(crate) fn insert(&self, key: &K) {
+    pub(crate) fn insert(&self, key: K) {
         let mut prev: Vec<NullableNodePtr<K>, Arena> = 
             Vec::with_capacity_in(MAX_HEIGHT as usize, self.arena_.clone());
         for _ in 0..(MAX_HEIGHT) { prev.push(None); }
-        let x = self.find_greater_or_equal(key, Some(&mut prev));
+        let x = self.find_greater_or_equal(&key, Some(&mut prev));
 
         // Our data structure does not allow duplicate insertion
-        debug_assert!(x.is_none() || x.unwrap().key != *key);
+        debug_assert!(x.is_none() || x.unwrap().key != key);
 
         let height = self.random_height();
         if height > self.get_max_height() {
@@ -74,7 +80,7 @@ impl<K: PartialOrd + Clone> SkipList<K> {
             *self.max_height_.write().unwrap() = height;
         }
 
-        let x = Self::new_node(key.clone(), height, self.arena_.clone());
+        let x = Self::new_node(key, height, self.arena_.clone());
         for i in 0..(height as usize) {
             let p = prev[i].clone().unwrap();
             x.set_next(i, p.next(i));
@@ -195,15 +201,15 @@ impl<K: PartialOrd + Clone> SkipList<K> {
 /// Current implementation of SkipList only support node insertion.
 /// There is no way to read non-existent node for multiple threads.
 /// Thread Safe.
-pub(crate) struct Iter<K> {
-    list_: Arc<SkipList<K>, Arena>,
+pub(crate) struct Iter<K, C> {
+    list_: Arc<SkipList<K, C>, Arena>,
     node_: RwLock<NullableNodePtr<K>>,
 }
 
-impl<K: PartialOrd + Clone> Iter<K> {
+impl<K: PartialOrd + Clone, C: Comparator<K>> Iter<K, C> {
     /// Initialize an iterator over the specified list.
     /// The returned iterator is not valid.
-    pub(crate) fn new(list: Arc<SkipList<K>, Arena>) -> Self {
+    pub(crate) fn new(list: Arc<SkipList<K, C>, Arena>) -> Self {
         Self { list_: list, node_: RwLock::new(None) }
     }
 
@@ -288,7 +294,7 @@ impl<K> Node<K> {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeSet, sync::{atomic::{AtomicBool, AtomicI32, Ordering}, Arc, Condvar, Mutex}, thread};
+    use std::{cmp, collections::BTreeSet, sync::{atomic::{AtomicBool, AtomicI32, Ordering}, Arc, Condvar, Mutex}, thread};
     use crate::util::{hash::hash, testutil::random_seed};
 
     use super::*;
@@ -296,10 +302,23 @@ mod tests {
     #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
     struct Key(u64);
 
+    struct KeyCmp;
+    impl Comparator<Key> for KeyCmp {
+        fn compare(&self, left: &Key, right: &Key) -> std::cmp::Ordering {
+            if left.0 < right.0 {
+                cmp::Ordering::Less
+            } else if left.0 > right.0 {
+                cmp::Ordering::Greater
+            } else {
+                cmp::Ordering::Equal
+            }
+        }
+    }
+
     #[test]
     fn empty_test() {
         let arena = Arena::new();
-        let list: Arc<SkipList<Key>, Arena> = Arc::new_in(SkipList::new_in(Key(0), arena.clone()), arena);
+        let list: Arc<SkipList<Key, KeyCmp>, Arena> = Arc::new_in(SkipList::new_in(Key(0), KeyCmp, arena.clone()), arena);
         assert!(!list.contains(&Key(10)));
 
         let mut iter = Iter::new(list.clone());
@@ -319,12 +338,12 @@ mod tests {
         let mut rnd = Random::new(1000);
         let mut keys: BTreeSet<Key> = BTreeSet::new();
         let arena = Arena::new();
-        let list: Arc<SkipList<Key>, Arena> = Arc::new_in(SkipList::new_in(Key(0), arena.clone()), arena);
+        let list: Arc<SkipList<Key, KeyCmp>, Arena> = Arc::new_in(SkipList::new_in(Key(0), KeyCmp, arena.clone()), arena);
 
         for _ in 0..N {
             let key = Key((rnd.next() % R) as u64);
             if keys.insert(key) {
-                list.insert(&key);
+                list.insert(key);
             }
         }
 
@@ -419,14 +438,14 @@ mod tests {
         current_: State,
         // SkipList is not protected by mu_.  We just use a single writer
         // thread to modify it.
-        list_: Arc<SkipList<Key>, Arena>,
+        list_: Arc<SkipList<Key, KeyCmp>, Arena>,
     }
     impl ConcurrentTest {
         fn new() -> Self {
             let arena = Arena::new();
             Self {
                 current_: State::new(),
-                list_: Arc::new_in(SkipList::new_in(Key(0), arena.clone()), arena),
+                list_: Arc::new_in(SkipList::new_in(Key(0), KeyCmp, arena.clone()), arena),
             }
         }
         // REQUIRES: External synchronization
@@ -434,7 +453,7 @@ mod tests {
             let k = rnd.next() % K;
             let g = self.current_.get(k as usize) + 1;
             let key = Self::make_key(k as u64, g as u64);
-            self.list_.insert(&key);
+            self.list_.insert(key);
             self.current_.set(k as usize, g);
         }
         fn read_step(&self, rnd: &mut Random) {

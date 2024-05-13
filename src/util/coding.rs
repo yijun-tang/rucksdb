@@ -6,6 +6,8 @@
 use std::io::Write;
 use crate::slice::Slice;
 
+use super::arena::Arena;
+
 static B:u32 = 128;
 
 pub(crate) fn put_fixed32(dst: &mut Vec<u8>, value: u32) {
@@ -127,6 +129,10 @@ pub(crate)fn decode_fixed32(bytes: [u8; 4]) -> u32 {
     u32::from_le_bytes(bytes)
 }
 
+pub(crate) fn encode_fixed64_to(buf: &mut Vec<u8, Arena>, value: u64) {
+    buf.extend(value.to_le_bytes());
+}
+
 #[inline]
 pub(crate) fn encode_fixed64(value: u64) -> [u8; 8] {
     value.to_le_bytes()
@@ -143,6 +149,31 @@ pub(crate) fn decode_fixed64(bytes: [u8; 8]) -> u64 {
     u64::from_le_bytes(bytes)
 }
 
+pub(crate) fn encode_varint32_to(buf: &mut Vec<u8, Arena>, v: u32) {
+    // Operate on characters as unsigneds
+    if v < (1 << 7) {
+        buf.push(v as u8);
+    } else if v < (1 << 14) {
+        buf.push((v | B) as u8);
+        buf.push((v >> 7) as u8);
+    } else if v < (1 << 21) {
+        buf.push((v | B) as u8);
+        buf.push(((v >> 7) | B) as u8);
+        buf.push((v >> 14) as u8);
+    } else if v < (1 << 28) {
+        buf.push((v | B) as u8);
+        buf.push(((v >> 7) | B) as u8);
+        buf.push(((v >> 14) | B) as u8);
+        buf.push((v >> 21) as u8);
+    } else {
+        buf.push((v | B) as u8);
+        buf.push(((v >> 7) | B) as u8);
+        buf.push(((v >> 14) | B) as u8);
+        buf.push(((v >> 21) | B) as u8);
+        buf.push((v >> 28) as u8);
+    }
+}
+
 /// Encoding u32 as bytes of variable size.
 /// 
 /// 0xxxxxxx:                                           v < 1 << 7, 1 byte
@@ -150,7 +181,7 @@ pub(crate) fn decode_fixed64(bytes: [u8; 8]) -> u64 {
 /// 1xxxxxxx 1xxxxxxx 0xxxxxxx:                         v < 1 << 21, 3 bytes
 /// 1xxxxxxx 1xxxxxxx 1xxxxxxx 0xxxxxxx:                v < 1 << 28, 4 bytes
 /// 1xxxxxxx 1xxxxxxx 1xxxxxxx 1xxxxxxx 0xxxxxxx:       v >= 1 << 28, 5 bytes
-fn encode_varint32(v: u32) -> Vec<u8> {
+pub(crate) fn encode_varint32(v: u32) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
     // Operate on characters as unsigneds
     if v < (1 << 7) {
